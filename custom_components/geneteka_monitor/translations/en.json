@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Geneteka - Monitor Nazwisk",
+        "description": "Wpisz nazwisko, które chcesz monitorować w ogólnokrajowej wyszukiwarce Geneteki.",
+        "data": {
+          "surname": "Nazwisko"
+        }
+      }
+    },
+    "error": {
+      "empty_surname": "Nazwisko nie może być puste",
+      "cannot_connect": "Nie udało się połączyć z Geneteką - spróbuj ponownie później",
+      "unknown": "Wystąpił nieoczekiwany błąd"
+    },
+    "abort": {
+      "already_configured": "To nazwisko jest już monitorowane"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ustawienia monitorowania",
+        "data": {
+          "update_interval_hours": "Jak często sprawdzać (godziny)"
+        }
+      }
+    }
+  }
+}

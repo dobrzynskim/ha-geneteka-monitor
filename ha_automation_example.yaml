@@ -1,0 +1,23 @@
+# Przykładowa automatyzacja Home Assistant.
+# Wklej do Ustawienia -> Automatyzacje -> Edytuj w YAML (nowa automatyzacja),
+# albo dorzuć do automations.yaml.
+#
+# Podmień entity_id na realną nazwę encji "Nowe rekordy" dla Twojego
+# nazwiska (zobaczysz ją w Ustawienia -> Urządzenia i usługi -> Urządzenia
+# -> "Geneteka: <Nazwisko>"), oraz nazwę usługi notify.* na swój telefon.
+
+alias: "Geneteka - powiadomienie o nowych rekordach"
+description: "Wysyła powiadomienie, gdy Monitor Nazwisk wykryje nowe indeksy"
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.geneteka_dobrzynska_5_nowe_rekordy
+    above: 0
+condition: []
+action:
+  - service: notify.mobile_app_TWOJ_TELEFON
+    data:
+      title: "Geneteka: nowe rekordy!"
+      message: >
+        Znaleziono {{ trigger.to_state.state }} nowych rekordów.
+        Sprawdź szczegóły w Home Assistant (encje "Region: ...").
+mode: single

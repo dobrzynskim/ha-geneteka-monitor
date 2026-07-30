@@ -1,0 +1,11 @@
+{
+  "domain": "geneteka_monitor",
+  "name": "Geneteka - Monitor Nazwisk",
+  "codeowners": ["@dobrzynskim"],
+  "config_flow": true,
+  "documentation": "https://github.com/dobrzynskim/ha-geneteka-monitor",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.4.0"
+}
