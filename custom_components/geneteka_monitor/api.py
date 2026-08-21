@@ -21,10 +21,13 @@ HEADERS = {
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 }
 
-# Popularne nazwiska (np. "Nowak") zwracają dużo większą stronę HTML i strona
-# Geneteki bywa dla nich zauważalnie wolniejsza - dajemy więcej czasu niż na
-# zwykłe zapytanie.
-REQUEST_TIMEOUT_SECONDS = 60
+# Popularne nazwiska (np. "Kowalski") zwracają dużo większą stronę HTML i
+# strona Geneteki bywa dla nich zauważalnie wolniejsza (zmierzone: ~32s dla
+# "Kowalski") - dajemy sporo zapasu ponad to, żeby nie ucinać zapytania,
+# które i tak by się udało, gdyby dać mu chwilę więcej. Dla naprawdę
+# ekstremalnych nazwisk (np. "Nowak") Geneteka i tak odda 504 po swojej
+# stronie dużo wcześniej - tego już żaden timeout klienta nie naprawi.
+REQUEST_TIMEOUT_SECONDS = 120
 
 # Geneteka czasem odpowiada 502 albo się zawiesza pod obciążeniem (zwłaszcza
 # dla popularnych nazwisk) - ponawiamy z rosnącym odstępem zamiast od razu
