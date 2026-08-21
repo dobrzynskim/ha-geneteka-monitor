@@ -82,26 +82,66 @@ class GenetekaCoordinator(DataUpdateCoordinator):
 
         previous = self._previous or {}
         stat_keys = ("total", "births", "marriages", "deaths")
+        now = dt_util.now()
 
-        today = dt_util.now().date().isoformat()
-        if previous.get("baseline_date") != today:
-            # Nowy dzień (albo pierwsze uruchomienie integracji) - licznik
-            # dzienny startuje od zera. Punktem odniesienia jest ostatni
-            # zapamiętany stan sprzed zmiany daty (a przy pierwszym
-            # uruchomieniu - stan bieżący, żeby nie pokazać sztucznie dużej
-            # liczby "nowych" rekordów).
-            baseline = previous.get("last_totals") or {key: stats[key] for key in stat_keys}
-            baseline_regions = previous.get("last_regions", {})
+        if "periods" in previous:
+            periods_state = previous["periods"]
+        elif "baseline_date" in previous:
+            # Migracja ze starego, płaskiego formatu (tylko licznik dzienny)
+            # - dzień przenosimy 1:1, żeby nie zerować już zebranego
+            # dzisiejszego licznika. Tydzień/miesiąc to nowa funkcja, więc
+            # startują od zera, tak jak przy pierwszym uruchomieniu.
+            periods_state = {
+                "day": {
+                    "key": previous["baseline_date"],
+                    "baseline": previous.get("baseline", {}),
+                    "last_totals": previous.get("last_totals", {}),
+                }
+            }
         else:
-            baseline = previous.get("baseline", {key: stats[key] for key in stat_keys})
-            baseline_regions = previous.get("baseline_regions", {})
+            periods_state = {}
+
+        baseline_regions = previous.get("baseline_regions", {})
+
+        # Ten sam mechanizm baseline/reset co przy liczniku dziennym,
+        # uogólniony na trzy długości okna: dzień/tydzień/miesiąc. Klucz
+        # okresu (np. "2026-08-21", "2026-W34", "2026-08") zmienia się z
+        # kalendarzem, co samo w sobie wyzwala reset - nie trzeba osobnego
+        # harmonogramu.
+        new_periods_state = {}
+        for period, period_key in (
+            ("day", now.date().isoformat()),
+            ("week", f"{now.isocalendar()[0]}-W{now.isocalendar()[1]:02d}"),
+            ("month", now.strftime("%Y-%m")),
+        ):
+            state = periods_state.get(period, {})
+            if state.get("key") != period_key:
+                baseline = state.get("last_totals") or {key: stats[key] for key in stat_keys}
+                if period == "day":
+                    baseline_regions = previous.get("last_regions", {})
+            else:
+                baseline = state.get("baseline", {key: stats[key] for key in stat_keys})
+            new_periods_state[period] = {
+                "key": period_key,
+                "baseline": baseline,
+                "last_totals": {key: stats[key] for key in stat_keys},
+            }
 
         stats["deltas"] = {
-            key: max(0, stats[key] - baseline.get(key, stats[key])) for key in stat_keys
+            key: max(0, stats[key] - new_periods_state["day"]["baseline"].get(key, stats[key]))
+            for key in stat_keys
+        }
+        stats["deltas_week"] = {
+            key: max(0, stats[key] - new_periods_state["week"]["baseline"].get(key, stats[key]))
+            for key in stat_keys
+        }
+        stats["deltas_month"] = {
+            key: max(0, stats[key] - new_periods_state["month"]["baseline"].get(key, stats[key]))
+            for key in stat_keys
         }
 
-        # Dorzucamy deltę per region - żeby było widać KONKRETNIE gdzie przybyło,
-        # nie tylko w sumie krajowej. Liczona tak samo, od początku doby.
+        # Dorzucamy deltę per region (tylko dzienną) - żeby było widać
+        # KONKRETNIE gdzie przybyło, nie tylko w sumie krajowej.
         for region_name, region_data in stats["regions"].items():
             prev_region_total = baseline_regions.get(region_name, {}).get(
                 "total", region_data["total"]
@@ -109,10 +149,8 @@ class GenetekaCoordinator(DataUpdateCoordinator):
             region_data["zmiana"] = max(0, region_data["total"] - prev_region_total)
 
         self._previous = {
-            "baseline": baseline,
-            "baseline_date": today,
+            "periods": new_periods_state,
             "baseline_regions": baseline_regions,
-            "last_totals": {key: stats[key] for key in stat_keys},
             "last_regions": {
                 name: {"total": r["total"]} for name, r in stats["regions"].items()
             },

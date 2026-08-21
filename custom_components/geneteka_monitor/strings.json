@@ -7,6 +7,10 @@
         "data": {
           "surname": "Nazwisko"
         }
+      },
+      "confirm_similar": {
+        "title": "Podobne nazwisko już monitorowane",
+        "description": "Już monitorujesz \"{similar}\" - to bardzo podobne do \"{surname}\". Jeśli to literówka, wróć i popraw. Jeśli to celowe (np. sprawdzasz oba warianty pisowni), potwierdź dodanie."
       }
     },
     "error": {

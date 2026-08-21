@@ -38,6 +38,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         for key, label, icon in STAT_TYPES
     ]
     entities.append(GenetekaNewRecordsSensor(coordinator, entry))
+    entities.append(GenetekaPeriodRecordsSensor(coordinator, entry, "week"))
+    entities.append(GenetekaPeriodRecordsSensor(coordinator, entry, "month"))
     entities.append(GenetekaTopRegionSensor(coordinator, entry))
     async_add_entities(entities)
 
@@ -116,6 +118,43 @@ class GenetekaNewRecordsSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         deltas = self.coordinator.data.get("deltas", {})
+        return {
+            "nowe_urodzenia": deltas.get("births", 0),
+            "nowe_malzenstwa": deltas.get("marriages", 0),
+            "nowe_zgony": deltas.get("deaths", 0),
+        }
+
+
+class GenetekaPeriodRecordsSensor(CoordinatorEntity, SensorEntity):
+    """Ile przybyło rekordów w bieżącym tygodniu/miesiącu.
+
+    Ten sam mechanizm baseline/reset co "5. Nowe dzisiaj", tylko z dłuższym
+    oknem - przydatne do podsumowań bez liczenia tego ręcznie w automatyzacji.
+    """
+
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = "rekordów"
+
+    _PERIOD_INFO = {
+        "week": ("7. Nowe w tym tygodniu", "mdi:calendar-week", "deltas_week"),
+        "month": ("8. Nowe w tym miesiącu", "mdi:calendar-month", "deltas_month"),
+    }
+
+    def __init__(self, coordinator, entry: ConfigEntry, period: str):
+        super().__init__(coordinator)
+        label, icon, self._data_key = self._PERIOD_INFO[period]
+        self._attr_name = label
+        self._attr_icon = icon
+        self._attr_unique_id = f"{entry.entry_id}_new_records_{period}"
+        self._attr_device_info = _device_info(coordinator, entry)
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get(self._data_key, {}).get("total", 0)
+
+    @property
+    def extra_state_attributes(self):
+        deltas = self.coordinator.data.get(self._data_key, {})
         return {
             "nowe_urodzenia": deltas.get("births", 0),
             "nowe_malzenstwa": deltas.get("marriages", 0),
