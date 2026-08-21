@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -26,6 +27,14 @@ PLATFORMS = [Platform.SENSOR]
 
 STORAGE_VERSION = 1
 
+# Geneteka zwraca 502 dla popularnych nazwisk, gdy trafi ją kilka
+# jednoczesnych zapytań naraz (np. przy starcie HA, kiedy wszystkie wpisy
+# konfiguracyjne tej integracji odświeżają się równolegle) - stąd wspólna
+# blokada między wszystkimi coordinatorami tej integracji, żeby zapytania do
+# geneteka.genealodzy.pl szły pojedynczo, z odstępem, a nie wszystkie naraz.
+REQUEST_LOCK_KEY = f"{DOMAIN}_request_lock"
+REQUEST_STAGGER_SECONDS = 3
+
 
 class GenetekaCoordinator(DataUpdateCoordinator):
     """Koordynator pobierający dane i liczący dzienny licznik nowych rekordów.
@@ -40,6 +49,7 @@ class GenetekaCoordinator(DataUpdateCoordinator):
         self.session = async_get_clientsession(hass)
         self._store = Store(hass, STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}")
         self._previous: dict | None = None
+        self._request_lock = hass.data.setdefault(REQUEST_LOCK_KEY, asyncio.Lock())
 
         interval_hours = entry.options.get(
             CONF_UPDATE_INTERVAL_HOURS, DEFAULT_UPDATE_INTERVAL_HOURS
@@ -59,10 +69,16 @@ class GenetekaCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         await self._async_load_previous()
 
-        try:
-            stats = await async_get_surname_stats(self.session, self.surname)
-        except GenetekaApiError as err:
-            raise UpdateFailed(str(err)) from err
+        async with self._request_lock:
+            try:
+                stats = await async_get_surname_stats(self.session, self.surname)
+            except GenetekaApiError as err:
+                raise UpdateFailed(str(err)) from err
+            finally:
+                # Odstęp trzymany WEWNĄTRZ blokady, żeby kolejne oczekujące
+                # zapytanie też ruszyło dopiero po nim - inaczej stagger nie
+                # miałby sensu.
+                await asyncio.sleep(REQUEST_STAGGER_SECONDS)
 
         previous = self._previous or {}
         stat_keys = ("total", "births", "marriages", "deaths")
