@@ -88,18 +88,19 @@ class GenetekaStatSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self):
         data = self.coordinator.data
         return {
-            "zmiana_od_ostatniego_sprawdzenia": data.get("deltas", {}).get(self._stat_key, 0),
+            "nowe_dzisiaj": data.get("deltas", {}).get(self._stat_key, 0),
             "nazwisko": data.get("surname"),
             "link_do_wyszukiwania": data.get("url"),
         }
 
 
 class GenetekaNewRecordsSensor(CoordinatorEntity, SensorEntity):
-    """Ile przybyło rekordów od ostatniego sprawdzenia - widoczne wprost jako stan,
-    a nie zagrzebane w atrybutach. Na tym najwygodniej oprzeć automatyzację."""
+    """Ile przybyło rekordów od początku bieżącej doby (zeruje się o północy) -
+    widoczne wprost jako stan, a nie zagrzebane w atrybutach. Na tym
+    najwygodniej oprzeć automatyzację."""
 
     _attr_has_entity_name = True
-    _attr_name = "5. Nowe rekordy"
+    _attr_name = "5. Nowe dzisiaj"
     _attr_icon = "mdi:bell-alert"
     _attr_native_unit_of_measurement = "rekordów"
 
@@ -158,7 +159,7 @@ class GenetekaTopRegionSensor(CoordinatorEntity, SensorEntity):
         return {
             "rekordy": top_data["total"],
             "procent_calosci": round(top_data["total"] / grand_total * 100, 1),
-            "nowe_od_ostatniego_sprawdzenia": top_data.get("zmiana", 0),
+            "nowe_dzisiaj": top_data.get("zmiana", 0),
         }
 
 
@@ -196,5 +197,5 @@ class GenetekaRegionSensor(CoordinatorEntity, SensorEntity):
             "urodzenia": data.get("births", 0),
             "malzenstwa": data.get("marriages", 0),
             "zgony": data.get("deaths", 0),
-            "zmiana_od_ostatniego_sprawdzenia": data.get("zmiana", 0),
+            "nowe_dzisiaj": data.get("zmiana", 0),
         }
