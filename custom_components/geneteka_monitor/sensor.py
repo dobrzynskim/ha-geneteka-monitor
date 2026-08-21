@@ -79,7 +79,7 @@ class GenetekaStatSensor(CoordinatorEntity, SensorEntity):
         self._attr_icon = icon
         self._attr_unique_id = f"{entry.entry_id}_{stat_key}"
         self._attr_native_unit_of_measurement = "rekordów"
-        self._attr_state_class = "total"
+        self._attr_state_class = "total_increasing"
         self._attr_device_info = _device_info(coordinator, entry)
 
     @property
@@ -212,7 +212,7 @@ class GenetekaRegionSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:map-marker"
     _attr_native_unit_of_measurement = "rekordów"
-    _attr_state_class = "total"
+    _attr_state_class = "total_increasing"
 
     def __init__(self, coordinator, entry: ConfigEntry, region_name: str):
         super().__init__(coordinator)

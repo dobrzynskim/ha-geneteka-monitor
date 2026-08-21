@@ -21,7 +21,6 @@ from .const import (
     CONF_UPDATE_INTERVAL_HOURS,
     DEFAULT_UPDATE_INTERVAL_HOURS,
 )
-from .statistics import async_push_statistics
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -80,17 +79,6 @@ class GenetekaCoordinator(DataUpdateCoordinator):
                 # zapytanie też ruszyło dopiero po nim - inaczej stagger nie
                 # miałby sensu.
                 await asyncio.sleep(REQUEST_STAGGER_SECONDS)
-
-        try:
-            async_push_statistics(self.hass, self.surname, stats["total"])
-        except Exception:  # noqa: BLE001
-            # Long-term statistics to dodatek (ładny wykres w Historii) -
-            # jego niepowodzenie nie może psuć głównej aktualizacji sensorów.
-            _LOGGER.debug(
-                "Nie udało się zaktualizować long-term statistics dla '%s'",
-                self.surname,
-                exc_info=True,
-            )
 
         previous = self._previous or {}
         stat_keys = ("total", "births", "marriages", "deaths")
