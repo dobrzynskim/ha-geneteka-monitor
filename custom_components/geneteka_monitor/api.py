@@ -26,6 +26,11 @@ HEADERS = {
 # zwykłe zapytanie.
 REQUEST_TIMEOUT_SECONDS = 60
 
+# Geneteka czasem odpowiada 502 albo się zawiesza pod obciążeniem (zwłaszcza
+# dla popularnych nazwisk) - ponawiamy z rosnącym odstępem zamiast od razu
+# poddawać się do następnego zaplanowanego odświeżenia za godzinę.
+RETRY_BACKOFF_SECONDS = (2, 4, 8)
+
 # Kolejność kolumn w tabeli wyników Geneteki: urodzenia, zgony, śluby
 REGION_ROW_RE = re.compile(
     r'<tr[^>]*>\s*<td class="gt"><a[^>]*>([^<]+)</a></td>\s*'
@@ -40,21 +45,10 @@ class GenetekaApiError(Exception):
     """Błąd komunikacji z Geneteką (połączenie, timeout, albo nieoczekiwana odpowiedź)."""
 
 
-async def async_get_surname_stats(session: aiohttp.ClientSession, surname: str) -> dict:
-    """Pobiera statystyki nazwiska z Geneteki (wszystkie województwa naraz)."""
-    params = {
-        "search_lastname": surname,
-        "search_lastname2": "",
-        "from_date": "",
-        "to_date": "",
-        "rpp1": "",
-        "bdm": "",
-        "w": "",
-        "op": "se",
-        "lang": "pol",
-        "exac": "1",
-    }
-
+async def _fetch_html(
+    session: aiohttp.ClientSession, surname: str, params: dict
+) -> tuple[str, str]:
+    """Jedna próba pobrania strony wyników. Rzuca GenetekaApiError przy 5xx/timeout/błędzie połączenia."""
     try:
         async with session.get(
             GENETEKA_SEARCH_URL,
@@ -69,8 +63,7 @@ async def async_get_surname_stats(session: aiohttp.ClientSession, surname: str) 
                     f"(bardzo popularne nazwisko). Spróbuj ponownie później."
                 )
             response.raise_for_status()
-            html = await response.text()
-            request_url = str(response.url)
+            return await response.text(), str(response.url)
     except asyncio.TimeoutError as err:
         # asyncio.TimeoutError NIE dziedziczy po aiohttp.ClientError, więc musi
         # być łapany osobno - inaczej wypada jako "nieoczekiwany błąd" w UI.
@@ -80,6 +73,46 @@ async def async_get_surname_stats(session: aiohttp.ClientSession, surname: str) 
         ) from err
     except aiohttp.ClientError as err:
         raise GenetekaApiError(f"Błąd połączenia z Genetekę: {err}") from err
+
+
+async def async_get_surname_stats(session: aiohttp.ClientSession, surname: str) -> dict:
+    """Pobiera statystyki nazwiska z Geneteki (wszystkie województwa naraz).
+
+    Ponawia próbę (z rosnącym odstępem, RETRY_BACKOFF_SECONDS) na 5xx/timeout/
+    błąd połączenia - to najczęstsza przyczyna niepowodzeń przy popularnych
+    nazwiskach, i zwykle mija po chwili.
+    """
+    params = {
+        "search_lastname": surname,
+        "search_lastname2": "",
+        "from_date": "",
+        "to_date": "",
+        "rpp1": "",
+        "bdm": "",
+        "w": "",
+        "op": "se",
+        "lang": "pol",
+        "exac": "1",
+    }
+
+    total_attempts = len(RETRY_BACKOFF_SECONDS) + 1
+    for attempt in range(total_attempts):
+        try:
+            html, request_url = await _fetch_html(session, surname, params)
+            break
+        except GenetekaApiError as err:
+            if attempt >= len(RETRY_BACKOFF_SECONDS):
+                raise
+            backoff = RETRY_BACKOFF_SECONDS[attempt]
+            _LOGGER.warning(
+                "Próba %d/%d dla '%s' nieudana (%s), ponawiam za %ds",
+                attempt + 1,
+                total_attempts,
+                surname,
+                err,
+                backoff,
+            )
+            await asyncio.sleep(backoff)
 
     _LOGGER.debug("Odpowiedź dla '%s': %d znaków HTML", surname, len(html))
 

@@ -23,7 +23,7 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 STORAGE_VERSION = 1
 
@@ -143,3 +143,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Usuń zapisany stan licznika, żeby po usunięciu integracji nie zostawał
+    osierocony plik w .storage (nic go już wtedy nie czyta ani nie kasuje)."""
+    await Store(hass, STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}").async_remove()

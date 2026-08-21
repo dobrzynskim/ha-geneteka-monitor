@@ -8,10 +8,10 @@ import unicodedata
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .entity import device_info as _device_info
 
 # Numerowane etykiety, żeby wymusić kolejność w domyślnej karcie urządzenia HA
 # (encje są tam sortowane alfabetycznie po nazwie - cyfry sortują się przed
@@ -30,14 +30,6 @@ def _slugify(text: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "_", text).strip("_").lower()
 
 
-def _device_info(coordinator, entry: ConfigEntry) -> DeviceInfo:
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name=f"Geneteka: {coordinator.surname}",
-        model="Monitor nazwiska",
-    )
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
 
@@ -47,21 +39,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     ]
     entities.append(GenetekaNewRecordsSensor(coordinator, entry))
     entities.append(GenetekaTopRegionSensor(coordinator, entry))
+    async_add_entities(entities)
 
     # Jedna encja per region, w którym w ogóle są jakieś wyniki - to jest
     # "konkretne" rozbicie, o które prosiłeś, a nie zagrzebany atrybut JSON.
-    #
-    # WAŻNE ograniczenie: lista regionów jest tworzona RAZ, na podstawie
-    # pierwszego pobrania przy dodawaniu integracji. Jeśli kiedyś pojawi się
-    # zupełnie nowy region (parafia w województwie, gdzie wcześniej nie było
-    # żadnego trafienia), nie dostanie automatycznie własnej encji - trzeba
-    # by usunąć i dodać integrację ponownie. Dla istniejących regionów
-    # aktualizacja liczby i delty działa normalnie przy każdym odświeżeniu.
-    regions = coordinator.data.get("regions", {})
-    for region_name in regions:
-        entities.append(GenetekaRegionSensor(coordinator, entry, region_name))
+    # Dokładane dynamicznie: gdy pojawi się zupełnie nowy region (parafia w
+    # województwie, gdzie wcześniej nie było żadnego trafienia), dostaje
+    # własną encję od razu przy najbliższym odświeżeniu, bez potrzeby
+    # usuwania i dodawania integracji ponownie.
+    known_regions: set[str] = set()
 
-    async_add_entities(entities)
+    def _add_new_region_entities() -> None:
+        new_names = [
+            name for name in coordinator.data.get("regions", {}) if name not in known_regions
+        ]
+        if not new_names:
+            return
+        known_regions.update(new_names)
+        async_add_entities(
+            GenetekaRegionSensor(coordinator, entry, name) for name in new_names
+        )
+
+    _add_new_region_entities()
+    entry.async_on_unload(coordinator.async_add_listener(_add_new_region_entities))
 
 
 class GenetekaStatSensor(CoordinatorEntity, SensorEntity):
